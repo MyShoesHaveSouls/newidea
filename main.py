@@ -1,75 +1,76 @@
-from multiprocessing import Pool
 import hashlib
 import binascii
+import multiprocessing
 import time
-import re
+import os
+from Crypto.Hash import keccak
+from typing import List
 
-def private_key_to_address(private_key):
-    """
-    Convert a hexadecimal private key to an Ethereum address using keccak_256.
-    """
-    # Remove '0x' prefix if present
-    if private_key.startswith('0x'):
-        private_key = private_key[2:]
-    
-    # Ensure private key is 64 characters long
-    if len(private_key) != 64:
-        raise ValueError("Invalid private key length")
-    
-    k = hashlib.new('sha3_256')
-    k.update(binascii.unhexlify(private_key))
-    address = k.hexdigest()[-40:]  # Last 40 hex characters
-    return address
-
-def check_address(private_key, addresses):
-    """
-    Check if the generated address from the private key is in the list of addresses.
-    """
+# Function to convert a private key to an Ethereum address
+def private_key_to_address(private_key: str) -> str:
     try:
-        address = private_key_to_address(private_key)
-        if address in addresses:
-            print(f"Match found! Address: {address}, Private Key: {private_key}")
-    except (ValueError, binascii.Error) as e:
+        # Ensure the private key is valid hexadecimal and of correct length
+        private_key_bytes = binascii.unhexlify(private_key)
+        if len(private_key_bytes) != 32:
+            raise ValueError("Invalid private key length")
+
+        # Generate the Ethereum address
+        k = keccak.new(digest_bits=256)
+        k.update(private_key_bytes)
+        address = k.hexdigest()[24:]  # Use only the last 20 bytes (40 hex chars)
+        return address
+    except (binascii.Error, ValueError) as e:
         print(f"Error with private key {private_key}: {e}")
+        return None
 
-def generate_and_check_addresses(private_keys, addresses):
-    """
-    Generate addresses from private keys and check against a list of addresses in parallel.
-    """
-    with Pool(processes=2) as pool:
-        pool.starmap(check_address, [(key, addresses) for key in private_keys])
+# Function to check the balance of an Ethereum address
+def check_address(private_key: str, addresses: List[str]) -> None:
+    address = private_key_to_address(private_key)
+    if address and address in addresses:
+        print(f"Match found! Address: {address}, Private Key: {private_key}")
 
-def load_addresses_from_file(filepath):
-    """
-    Load addresses from a file into a set.
-    """
-    with open(filepath, 'r') as file:
-        addresses = {line.strip() for line in file if re.match(r'^[0-9a-fA-F]{40}$', line.strip())}
+# Function to read private keys from a file
+def load_private_keys(file_path: str) -> List[str]:
+    with open(file_path, 'r') as file:
+        keys = [line.strip() for line in file if line.strip()]
+    return keys
+
+# Function to read addresses from a file
+def load_addresses(file_path: str) -> List[str]:
+    with open(file_path, 'r') as file:
+        addresses = [line.strip() for line in file if line.strip()]
     return addresses
 
+# Main function to start the process
 def main():
-    # Path to your addresses file
-    addresses_file_path = './addresses.txt'
-    
-    print("Starting script...")
-    
-    # Load addresses
-    addresses = load_addresses_from_file(addresses_file_path)
-    print(f"Loaded {len(addresses)} addresses.")
-    
-    # Example private keys to test (Replace this with actual private keys you need to test)
-    private_keys = [
-        "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678",
-        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-    ]
-    
-    print("Starting address generation and checking...")
     start_time = time.time()
-    
-    generate_and_check_addresses(private_keys, addresses)
-    
-    end_time = time.time()
-    print(f"Execution time: {end_time - start_time:.2f} seconds")
+    print("Starting script...")
 
-if __name__ == "__main__":
+    # Paths to files
+    private_keys_file = 'private_keys.txt'  # Update with your actual file path
+    addresses_file = 'addresses.txt'        # Update with your actual file path
+
+    # Load private keys and addresses
+    private_keys = load_private_keys(private_keys_file)
+    addresses = load_addresses(addresses_file)
+
+    if not private_keys:
+        print("No private keys loaded. Please check your private_keys.txt file.")
+        return
+    if not addresses:
+        print("No addresses loaded. Please check your addresses.txt file.")
+        return
+
+    print(f"Loaded {len(private_keys)} private keys.")
+    print(f"Loaded {len(addresses)} addresses.")
+    print("Starting address generation and checking...")
+
+    # Use multiprocessing to speed up the checking process
+    with multiprocessing.Pool() as pool:
+        pool.starmap(check_address, [(key, addresses) for key in private_keys])
+
+    execution_time = time.time() - start_time
+    print(f"Execution time: {execution_time:.2f} seconds")
+
+if __name__ == '__main__':
     main()
