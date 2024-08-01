@@ -36,4 +36,18 @@ def generate_and_check_addresses(address_set: Set[str]) -> None:
         address = private_key_to_address(private_key)
         
         if address in address_set:
-            print(f"Match found! Address: {address}, Private Key: {private_key.hex
+            print(f"Match found! Address: {address}, Private Key: {private_key.hex()}")
+            with open(found_file, 'a') as f:
+                f.write(f"Address: {address}, Private Key: {private_key.hex()}\n")
+            break  # Stop after finding a match
+
+# Main function to start the process
+def main():
+    addresses = read_addresses(address_file)
+    print(f"Loaded {len(addresses)} addresses.")
+    print("Starting address generation and checking...")
+    generate_and_check_addresses(addresses)
+    print("Script finished.")
+
+if __name__ == "__main__":
+    main()
