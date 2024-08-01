@@ -1,71 +1,51 @@
-import hashlib
+import os
 import binascii
+from Crypto.Hash import keccak
 import multiprocessing
 import time
-import os
-from Crypto.Hash import keccak
-from typing import List
 
-# Function to convert a private key to an Ethereum address
-def private_key_to_address(private_key: str) -> str:
-    try:
-        # Ensure the private key is valid hexadecimal and of correct length
-        private_key_bytes = binascii.unhexlify(private_key)
-        if len(private_key_bytes) != 32:
-            raise ValueError("Invalid private key length")
-
-        # Generate the Ethereum address
-        k = keccak.new(digest_bits=256)
-        k.update(private_key_bytes)
-        address = k.hexdigest()[24:]  # Use only the last 20 bytes (40 hex chars)
-        return address
-    except (binascii.Error, ValueError) as e:
-        print(f"Error with private key {private_key}: {e}")
-        return None
-
-# Function to check if the generated address matches any in the list
-def check_address(private_key: str, addresses: List[str]) -> None:
-    address = private_key_to_address(private_key)
-    if address and address in addresses:
-        print(f"Match found! Address: {address}, Private Key: {private_key}")
-
-# Function to read addresses from a file
-def load_addresses(file_path: str) -> List[str]:
+def load_addresses(file_path):
     with open(file_path, 'r') as file:
-        addresses = [line.strip().lower() for line in file if line.strip()]
-    return addresses
+        return {line.strip().lower() for line in file}
 
-# Main function to start the process
+def private_key_to_address(private_key):
+    private_key_bytes = binascii.unhexlify(private_key)
+    keccak_hash = keccak.new(digest_bits=256)
+    keccak_hash.update(private_key_bytes)
+    return '0x' + keccak_hash.hexdigest()[-40:]
+
+def check_address(private_key, target_addresses):
+    try:
+        address = private_key_to_address(private_key)
+        if address.lower() in target_addresses:
+            print(f"Match found! Address: {address}, Private Key: {private_key}")
+            os._exit(0)  # Stop the script
+    except (ValueError, binascii.Error) as e:
+        print(f"Error with private key {private_key}: {str(e)}")
+
+def generate_and_check_addresses(target_addresses):
+    while True:
+        private_key = binascii.hexlify(os.urandom(32)).decode('utf-8')
+        check_address(private_key, target_addresses)
+
 def main():
-    start_time = time.time()
     print("Starting script...")
-
-    # Paths to files
-    addresses_file = 'addresses.txt'  # Ensure this file path is correct
-
-    # Load addresses
-    addresses = load_addresses(addresses_file)
-
-    if not addresses:
-        print("No addresses loaded. Please check your addresses.txt file.")
-        return
-
-    print(f"Loaded {len(addresses)} addresses.")
+    addresses_file = 'addresses.txt'
+    target_addresses = load_addresses(addresses_file)
+    print(f"Loaded {len(target_addresses)} addresses.")
     print("Starting address generation and checking...")
 
-    # List of example private keys for demonstration
-    # In practice, generate these dynamically
-    example_private_keys = [
-        "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", 
-        "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-    ]
+    start_time = time.time()
+    try:
+        with multiprocessing.Pool() as pool:
+            pool.starmap(generate_and_check_addresses, [(target_addresses,)])
+    except KeyboardInterrupt:
+        print("Process interrupted.")
+    except SystemExit:
+        pass
+    finally:
+        end_time = time.time()
+        print(f"Execution time: {end_time - start_time:.2f} seconds")
 
-    # Use multiprocessing to speed up the checking process
-    with multiprocessing.Pool() as pool:
-        pool.starmap(check_address, [(key, addresses) for key in example_private_keys])
-
-    execution_time = time.time() - start_time
-    print(f"Execution time: {execution_time:.2f} seconds")
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
