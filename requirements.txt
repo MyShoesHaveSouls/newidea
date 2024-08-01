@@ -1,6 +1,1 @@
-os
-secrets
-hashlib
-ecdsa
-multiprocessing
-datetime as dt
+ecdsa==0.18.0
