@@ -1,13 +1,12 @@
 import os
 import secrets
-import hashlib
 import ecdsa
 import multiprocessing
 import datetime as dt
+from Crypto.Hash import keccak  # pycryptodome for Keccak-256 hashing
 
 # Number of threads to use
 threads = multiprocessing.cpu_count()
-addressFile = 'addresses.txt'
 foundFile = 'found.txt'
 
 # Function to generate a random Ethereum private key
@@ -16,14 +15,13 @@ def generate_private_key():
 
 # Function to generate Ethereum address from private key
 def private_key_to_address(private_key):
-    # Convert private key to public key
     key = ecdsa.SigningKey.from_string(private_key, curve=ecdsa.SECP256k1)
     public_key = key.get_verifying_key().to_string('compressed')
-    
-    # Generate address
-    keccak = hashlib.new('keccak_256')
-    keccak.update(public_key[1:])  # Skip the first byte (0x04)
-    address = keccak.digest()[-20:]
+
+    # Use pycryptodome to perform Keccak-256 hashing
+    keccak_hash = keccak.new(digest_bits=256)
+    keccak_hash.update(public_key[1:])  # Skip the first byte (0x04)
+    address = keccak_hash.digest()[-20:]
     return '0x' + address.hex()
 
 # Function to read Ethereum addresses from file
@@ -44,23 +42,23 @@ def generate_and_check_addresses(rawAddressSet, output_file):
                 f.write(message + '\n')
             return  # Exit the function once a match is found
 
-def run():
-    rawAddressSet = read_addresses(addressFile)
-    
-    # Start processes
+def run(address_file):
+    rawAddressSet = read_addresses(address_file)
+
     processes = []
     for _ in range(threads):
         process = multiprocessing.Process(target=generate_and_check_addresses, args=(rawAddressSet, foundFile))
         processes.append(process)
         process.start()
-    
+
     for process in processes:
         process.join()
 
 if __name__ == "__main__":
     try:
+        address_file = input("Enter the path to the addresses file: ")
         start_time = dt.datetime.today().timestamp()
-        run()
+        run(address_file)
         end_time = dt.datetime.today().timestamp()
         execution_time = end_time - start_time
         print(f"Execution time: {execution_time} seconds")
