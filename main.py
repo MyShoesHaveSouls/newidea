@@ -1,51 +1,63 @@
-import os
-import secrets
+from multiprocessing import Pool
 import hashlib
-import multiprocessing
-import datetime as dt
-from Crypto.Hash import SHA3_256
+import binascii
+import time
 
-# Function to generate a new Ethereum address from a private key
 def private_key_to_address(private_key):
-    # Convert private key to address
-    keccak = SHA3_256.new()
-    keccak.update(private_key)
-    address = keccak.digest()[-20:]
-    return '0x' + address.hex()
+    """
+    Convert a hexadecimal private key to an Ethereum address using keccak_256.
+    """
+    k = hashlib.new('sha3_256')
+    k.update(binascii.unhexlify(private_key))
+    address = k.hexdigest()[-40:]  # Last 40 hex characters
+    return address
 
-# Function to check if the generated address matches any in the list
-def check_address_in_list(address, address_set, private_key):
-    if address in address_set:
-        print(f"Match found! Address: {address}, Private Key: {private_key.hex()}")
-        with open('found.txt', 'a') as f:
-            f.write(f"Match found! Address: {address}, Private Key: {private_key.hex()}\n")
-        return True
-    return False
+def check_address(private_key, addresses):
+    """
+    Check if the generated address from the private key is in the list of addresses.
+    """
+    address = private_key_to_address(private_key)
+    if address in addresses:
+        print(f"Match found! Address: {address}, Private Key: {private_key}")
 
-# Function to generate private keys and corresponding addresses
-def generate_and_check_addresses(address_set):
-    while True:
-        # Generate a random private key
-        private_key = secrets.token_bytes(32)
-        # Generate address from the private key
-        address = private_key_to_address(private_key)
-        # Check if the address is in the address set
-        if check_address_in_list(address, address_set, private_key):
-            break
+def generate_and_check_addresses(private_keys, addresses):
+    """
+    Generate addresses from private keys and check against a list of addresses in parallel.
+    """
+    with Pool(processes=2) as pool:
+        pool.starmap(check_address, [(key, addresses) for key in private_keys])
 
-# Function to read Ethereum addresses from file
-def read_addresses(filename):
-    with open(filename, 'r') as f:
-        addresses = [line.strip() for line in f]
-    return set(addresses)
+def load_addresses_from_file(filepath):
+    """
+    Load addresses from a file into a set.
+    """
+    with open(filepath, 'r') as file:
+        addresses = {line.strip() for line in file}
+    return addresses
 
-# Main function to start the address generation and checking process
 def main():
+    # Path to your addresses file
+    addresses_file_path = './addresses.txt'
+    
     print("Starting script...")
-    addresses = read_addresses('addresses.txt')
+    
+    # Load addresses
+    addresses = load_addresses_from_file(addresses_file_path)
     print(f"Loaded {len(addresses)} addresses.")
+    
+    # Example private keys to test (Replace this with actual private keys you need to test)
+    private_keys = [
+        "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678",
+        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    ]
+    
     print("Starting address generation and checking...")
-    generate_and_check_addresses(addresses)
+    start_time = time.time()
+    
+    generate_and_check_addresses(private_keys, addresses)
+    
+    end_time = time.time()
+    print(f"Execution time: {end_time - start_time:.2f} seconds")
 
 if __name__ == "__main__":
     main()
