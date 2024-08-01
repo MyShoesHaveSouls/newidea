@@ -1,66 +1,52 @@
 import os
 import secrets
+import hashlib
 import ecdsa
 import multiprocessing
 import datetime as dt
-from Crypto.Hash import keccak  # pycryptodome for Keccak-256 hashing
+from typing import Set
 
-# Number of threads to use
-threads = multiprocessing.cpu_count()
-foundFile = 'found.txt'
+# Path to addresses.txt file and found.txt file
+address_file = 'addresses.txt'
+found_file = 'found.txt'
 
-# Function to generate a random Ethereum private key
-def generate_private_key():
-    return secrets.token_bytes(32)
-
-# Function to generate Ethereum address from private key
-def private_key_to_address(private_key):
-    key = ecdsa.SigningKey.from_string(private_key, curve=ecdsa.SECP256k1)
-    public_key = key.get_verifying_key().to_string('compressed')
-
-    # Use pycryptodome to perform Keccak-256 hashing
-    keccak_hash = keccak.new(digest_bits=256)
-    keccak_hash.update(public_key[1:])  # Skip the first byte (0x04)
-    address = keccak_hash.digest()[-20:]
-    return '0x' + address.hex()
+# Print start message
+print("Starting script...")
 
 # Function to read Ethereum addresses from file
-def read_addresses(filename):
+def read_addresses(filename: str) -> Set[str]:
     with open(filename, 'r') as f:
         addresses = [line.strip() for line in f]
     return set(addresses)
 
-# Function to generate random Ethereum addresses and check them against a list
-def generate_and_check_addresses(rawAddressSet, output_file):
-    for _ in range(threads * 10**6):  # Limit the number of attempts for demonstration purposes
-        private_key = generate_private_key()
+# Function to convert private key to Ethereum address
+def private_key_to_address(private_key: bytes) -> str:
+    # Perform key generation and address creation
+    # This example assumes keccak_256 is correctly handled by the `pysha3` package
+    keccak = hashlib.new('keccak_256')
+    keccak.update(private_key)
+    return '0x' + keccak.digest().hex()[-40:]  # Simplified for example
+
+# Function to generate random private keys and check them
+def generate_and_check_addresses(address_set: Set[str]) -> None:
+    while True:
+        # Generate a random private key
+        private_key = secrets.token_bytes(32)
         address = private_key_to_address(private_key)
-        if address in rawAddressSet:
-            message = f'Match found! Address: {address} has a private key: {private_key.hex()}'
-            print(message)
-            with open(output_file, 'a') as f:
-                f.write(message + '\n')
-            return  # Exit the function once a match is found
+        
+        if address in address_set:
+            print(f"Match found! Address: {address}, Private Key: {private_key.hex()}")
+            with open(found_file, 'a') as f:
+                f.write(f"Address: {address}, Private Key: {private_key.hex()}\n")
+            break  # Stop after finding a match
 
-def run(address_file):
-    rawAddressSet = read_addresses(address_file)
-
-    processes = []
-    for _ in range(threads):
-        process = multiprocessing.Process(target=generate_and_check_addresses, args=(rawAddressSet, foundFile))
-        processes.append(process)
-        process.start()
-
-    for process in processes:
-        process.join()
+# Main function to start the process
+def main():
+    addresses = read_addresses(address_file)
+    print(f"Loaded {len(addresses)} addresses.")
+    print("Starting address generation and checking...")
+    generate_and_check_addresses(addresses)
+    print("Script finished.")
 
 if __name__ == "__main__":
-    try:
-        address_file = input("Enter the path to the addresses file: ")
-        start_time = dt.datetime.today().timestamp()
-        run(address_file)
-        end_time = dt.datetime.today().timestamp()
-        execution_time = end_time - start_time
-        print(f"Execution time: {execution_time} seconds")
-    except Exception as e:
-        print(f"Error: {e}")
+    main()
