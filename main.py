@@ -3,6 +3,8 @@ import binascii
 from Crypto.Hash import keccak
 import multiprocessing
 import time
+import sys
+from multiprocessing import Value, Lock
 
 def load_addresses(file_path):
     with open(file_path, 'r') as file:
@@ -14,19 +16,23 @@ def private_key_to_address(private_key):
     keccak_hash.update(private_key_bytes)
     return '0x' + keccak_hash.hexdigest()[-40:]
 
-def check_address(private_key, target_addresses):
+def check_address(private_key, target_addresses, counter, lock):
     try:
         address = private_key_to_address(private_key)
+        with lock:
+            counter.value += 1
+            sys.stdout.write(f"\rChecked: {counter.value:,} addresses. Current Address: {address} from Private Key: {private_key}")
+            sys.stdout.flush()
         if address.lower() in target_addresses:
-            print(f"Match found! Address: {address}, Private Key: {private_key}")
+            print(f"\nMatch found! Address: {address}, Private Key: {private_key}")
             os._exit(0)  # Stop the script
     except (ValueError, binascii.Error) as e:
-        print(f"Error with private key {private_key}: {str(e)}")
+        print(f"\nError with private key {private_key}: {str(e)}")
 
-def generate_and_check_addresses(target_addresses):
+def generate_and_check_addresses(target_addresses, counter, lock):
     while True:
         private_key = binascii.hexlify(os.urandom(32)).decode('utf-8')
-        check_address(private_key, target_addresses)
+        check_address(private_key, target_addresses, counter, lock)
 
 def main():
     print("Starting script...")
@@ -35,12 +41,16 @@ def main():
     print(f"Loaded {len(target_addresses)} addresses.")
     print("Starting address generation and checking...")
 
+    # Initialize counter and lock for multiprocessing
+    counter = Value('i', 0)
+    lock = Lock()
+
     start_time = time.time()
     try:
         with multiprocessing.Pool() as pool:
-            pool.starmap(generate_and_check_addresses, [(target_addresses,)])
+            pool.starmap(generate_and_check_addresses, [(target_addresses, counter, lock)])
     except KeyboardInterrupt:
-        print("Process interrupted.")
+        print("\nProcess interrupted.")
     except SystemExit:
         pass
     finally:
