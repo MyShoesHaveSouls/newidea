@@ -4,7 +4,6 @@ from Crypto.Hash import keccak
 import multiprocessing
 import time
 import sys
-from multiprocessing import Value, Lock
 
 def load_addresses(file_path):
     with open(file_path, 'r') as file:
@@ -20,8 +19,8 @@ def check_address(private_key, target_addresses, counter, lock):
     try:
         address = private_key_to_address(private_key)
         with lock:
-            counter.value += 1
-            sys.stdout.write(f"\rChecked: {counter.value:,} addresses. Current Address: {address} from Private Key: {private_key}")
+            counter['value'] += 1
+            sys.stdout.write(f"\rChecked: {counter['value']:,} addresses. Current Address: {address} from Private Key: {private_key}")
             sys.stdout.flush()
         if address.lower() in target_addresses:
             print(f"\nMatch found! Address: {address}, Private Key: {private_key}")
@@ -41,9 +40,11 @@ def main():
     print(f"Loaded {len(target_addresses)} addresses.")
     print("Starting address generation and checking...")
 
-    # Initialize counter and lock for multiprocessing
-    counter = Value('i', 0)
-    lock = Lock()
+    # Initialize manager for shared state
+    manager = multiprocessing.Manager()
+    counter = manager.dict()
+    counter['value'] = 0
+    lock = manager.Lock()
 
     start_time = time.time()
     try:
