@@ -4,6 +4,7 @@ import hashlib
 import ecdsa
 import multiprocessing
 import datetime as dt
+from Crypto.Hash import keccak
 from typing import Set
 
 # Path to addresses.txt file and found.txt file
@@ -21,11 +22,11 @@ def read_addresses(filename: str) -> Set[str]:
 
 # Function to convert private key to Ethereum address
 def private_key_to_address(private_key: bytes) -> str:
-    # Perform key generation and address creation
-    # This example assumes keccak_256 is correctly handled by the `pysha3` package
-    keccak = hashlib.new('keccak_256')
-    keccak.update(private_key)
-    return '0x' + keccak.digest().hex()[-40:]  # Simplified for example
+    # Create a Keccak-256 hash of the private key
+    k = keccak.Keccak256.new()
+    k.update(private_key)
+    # Ethereum address is the last 20 bytes of the hash
+    return '0x' + k.digest()[-20:].hex()
 
 # Function to generate random private keys and check them
 def generate_and_check_addresses(address_set: Set[str]) -> None:
@@ -35,18 +36,4 @@ def generate_and_check_addresses(address_set: Set[str]) -> None:
         address = private_key_to_address(private_key)
         
         if address in address_set:
-            print(f"Match found! Address: {address}, Private Key: {private_key.hex()}")
-            with open(found_file, 'a') as f:
-                f.write(f"Address: {address}, Private Key: {private_key.hex()}\n")
-            break  # Stop after finding a match
-
-# Main function to start the process
-def main():
-    addresses = read_addresses(address_file)
-    print(f"Loaded {len(addresses)} addresses.")
-    print("Starting address generation and checking...")
-    generate_and_check_addresses(addresses)
-    print("Script finished.")
-
-if __name__ == "__main__":
-    main()
+            print(f"Match found! Address: {address}, Private Key: {private_key.hex
