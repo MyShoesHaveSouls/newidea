@@ -20,12 +20,15 @@ def check_address(private_key, target_addresses, counter, lock):
         address = private_key_to_address(private_key)
         with lock:
             counter['value'] += 1
+            # Use \r to overwrite the line in the terminal
             sys.stdout.write(f"\rChecked: {counter['value']:,} addresses. Current Address: {address} from Private Key: {private_key}")
             sys.stdout.flush()
         if address.lower() in target_addresses:
+            # Print result and exit
             print(f"\nMatch found! Address: {address}, Private Key: {private_key}")
             os._exit(0)  # Stop the script
     except (ValueError, binascii.Error) as e:
+        # Print error message on a new line
         print(f"\nError with private key {private_key}: {str(e)}")
 
 def generate_and_check_addresses(target_addresses, counter, lock):
