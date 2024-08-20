@@ -8,21 +8,18 @@ import logging
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Load addresses from file
 def load_addresses(file_path):
     with open(file_path, 'r') as file:
         addresses = {line.strip().lower() for line in file}
         logging.info(f"Loaded {len(addresses)} addresses.")
         return addresses
 
-# Convert private key to Ethereum address
 def private_key_to_address(private_key):
     private_key_bytes = binascii.unhexlify(private_key)
     keccak_hash = keccak.new(digest_bits=256)
     keccak_hash.update(private_key_bytes)
     return '0x' + keccak_hash.hexdigest()[-40:]
 
-# Check if generated address matches any target addresses
 def check_address(private_key, target_addresses):
     address = private_key_to_address(private_key)
     if address.lower() in target_addresses:
@@ -30,7 +27,6 @@ def check_address(private_key, target_addresses):
         return private_key, address
     return None
 
-# Generate random private keys and check against target addresses
 async def generate_and_check(target_addresses, stop_event):
     loop = asyncio.get_event_loop()
     while not stop_event.is_set():
@@ -40,8 +36,10 @@ async def generate_and_check(target_addresses, stop_event):
             stop_event.set()  # Signal other tasks to stop
             logging.info("Stopping all tasks due to match found.")
             return result
+        else:
+            # Print a message to confirm that tasks are running
+            print(f"Generated and checked address for private key: {private_key}")
 
-# Main function to orchestrate the address checking process
 async def main():
     addresses_file = 'addresses.txt'
     target_addresses = load_addresses(addresses_file)
