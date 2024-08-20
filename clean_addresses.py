@@ -8,9 +8,9 @@ def clean_addresses_file(input_file, output_file):
             addresses = re.findall(r'0x[a-fA-F0-9]{40}', line)
             for address in addresses:
                 outfile.write(f"{address}\n")
-
+                
 # Usage
-input_file = 'addresses.txt'
+input_file = 'EthRich_Bal.txt'
 output_file = 'cleaned_addresses.txt'
 clean_addresses_file(input_file, output_file)
 print(f"Cleaned addresses saved to {output_file}.")
