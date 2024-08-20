@@ -61,7 +61,7 @@ async def main():
     start_time = time.time()
 
     tasks = []
-    num_workers = os.cpu_count() * 8  # Adjust based on your hardware capabilities
+    num_workers = os.cpu_count() * 4  # Adjust based on your hardware capabilities
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         loop = asyncio.get_event_loop()
