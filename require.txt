@@ -1,0 +1,2 @@
+mnemonic==0.19
+numpy==1.24.4
