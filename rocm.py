@@ -62,16 +62,14 @@ async def main():
 
     start_time = time.time()
 
-    tasks = []
-    num_workers = torch.cuda.device_count() * 4  # Adjust based on your GPU capabilities
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    num_workers = torch.cuda.device_count() * 4 if torch.cuda.device_count() > 0 else os.cpu_count()
+
+    logging.info(f"Number of workers: {num_workers}")
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         loop = asyncio.get_event_loop()
-        for _ in range(num_workers):
-            tasks.append(loop.create_task(generate_and_check(target_addresses, stop_event, counter, max_checks, device)))
-        
+        tasks = [loop.create_task(generate_and_check(target_addresses, stop_event, counter, max_checks, device)) for _ in range(num_workers)]
         await asyncio.gather(*tasks)
 
     end_time = time.time()
