@@ -1,19 +1,16 @@
 import os
 import binascii
-import torch
 import hashlib
 import numpy as np
+import torch
 import asyncio
-import logging
-import time
 from concurrent.futures import ProcessPoolExecutor
+import logging
+from multiprocessing import Manager
+import time
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Check if ROCm is available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logging.info(f"Using device: {device}")
 
 def load_addresses(file_path):
     with open(file_path, 'r') as file:
@@ -22,11 +19,9 @@ def load_addresses(file_path):
         return addresses
 
 def private_key_to_address(private_key):
-    # Convert to tensor
-    private_key_bytes = torch.tensor(list(binascii.unhexlify(private_key)), dtype=torch.uint8, device=device)
-    # Create Blake2b hash
+    private_key_bytes = binascii.unhexlify(private_key)
     blake2b_hash = hashlib.blake2b(digest_size=32)
-    blake2b_hash.update(private_key_bytes.cpu().numpy())
+    blake2b_hash.update(private_key_bytes)
     return '0x' + blake2b_hash.hexdigest()[-40:]
 
 def check_addresses(private_keys, target_addresses):
@@ -37,11 +32,12 @@ def check_addresses(private_keys, target_addresses):
             return private_key, address
     return None
 
-async def generate_and_check(target_addresses, stop_event, counter, max_checks):
+async def generate_and_check(target_addresses, stop_event, counter, max_checks, device):
     batch_size = 1000  # Number of keys to generate per batch
     while not stop_event.is_set():
-        # Generate a batch of private keys
-        private_keys_batch = np.array([binascii.hexlify(os.urandom(32)).decode('utf-8') for _ in range(batch_size)])
+        # Generate a batch of private keys on the GPU using ROCm
+        private_keys_batch = torch.randint(0, 2**256, (batch_size,), dtype=torch.int64, device=device).cpu().numpy()
+        private_keys_batch = [hex(key)[2:].zfill(64) for key in private_keys_batch]
         result = await asyncio.get_event_loop().run_in_executor(None, check_addresses, private_keys_batch, target_addresses)
         if result:
             stop_event.set()  # Signal other tasks to stop
@@ -60,21 +56,22 @@ async def main():
     
     max_checks = int(input("Enter the number of addresses to check: "))
 
+    manager = Manager()
     stop_event = asyncio.Event()
-    counter = torch.multiprocessing.Value('i', 0)  # Shared counter for address checks
+    counter = manager.Value('i', 0)  # Shared counter for address checks
 
     start_time = time.time()
 
-    # Automatically adjust the number of workers based on the GPU's capabilities
-    num_workers = min(os.cpu_count() * 4, torch.cuda.get_device_properties(0).multi_processor_count * 2)
-    logging.info(f"Using {num_workers} workers based on GPU capabilities.")
+    tasks = []
+    num_workers = torch.cuda.device_count() * 4  # Adjust based on your GPU capabilities
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         loop = asyncio.get_event_loop()
-        tasks = [
-            loop.create_task(generate_and_check(target_addresses, stop_event, counter, max_checks))
-            for _ in range(num_workers)
-        ]
+        for _ in range(num_workers):
+            tasks.append(loop.create_task(generate_and_check(target_addresses, stop_event, counter, max_checks, device)))
+        
         await asyncio.gather(*tasks)
 
     end_time = time.time()
