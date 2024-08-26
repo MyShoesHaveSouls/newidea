@@ -50,7 +50,7 @@ async def generate_and_check(target_addresses, stop_event, counter, max_checks, 
         print(f"\rChecked {counter.value:,} addresses...", end='')
 
 async def main():
-    addresses_file = 'addresses.txt'
+    addresses_file = 'cleaned_addresses.txt'
     target_addresses = load_addresses(addresses_file)
     
     max_checks = int(input("Enter the number of addresses to check: "))
