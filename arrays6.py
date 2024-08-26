@@ -1,15 +1,19 @@
 import os
 import binascii
+import torch
 import hashlib
 import numpy as np
 import asyncio
-from concurrent.futures import ProcessPoolExecutor
 import logging
-from multiprocessing import Manager
 import time
+from concurrent.futures import ProcessPoolExecutor
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Check if ROCm is available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logging.info(f"Using device: {device}")
 
 def load_addresses(file_path):
     with open(file_path, 'r') as file:
@@ -18,9 +22,11 @@ def load_addresses(file_path):
         return addresses
 
 def private_key_to_address(private_key):
-    private_key_bytes = binascii.unhexlify(private_key)
+    # Convert to tensor
+    private_key_bytes = torch.tensor(list(binascii.unhexlify(private_key)), dtype=torch.uint8, device=device)
+    # Create Blake2b hash
     blake2b_hash = hashlib.blake2b(digest_size=32)
-    blake2b_hash.update(private_key_bytes)
+    blake2b_hash.update(private_key_bytes.cpu().numpy())
     return '0x' + blake2b_hash.hexdigest()[-40:]
 
 def check_addresses(private_keys, target_addresses):
@@ -54,20 +60,21 @@ async def main():
     
     max_checks = int(input("Enter the number of addresses to check: "))
 
-    manager = Manager()
     stop_event = asyncio.Event()
-    counter = manager.Value('i', 0)  # Shared counter for address checks
+    counter = torch.multiprocessing.Value('i', 0)  # Shared counter for address checks
 
     start_time = time.time()
 
-    tasks = []
-    num_workers = os.cpu_count() * 4  # Adjust based on your hardware capabilities
+    # Automatically adjust the number of workers based on the GPU's capabilities
+    num_workers = min(os.cpu_count() * 4, torch.cuda.get_device_properties(0).multi_processor_count * 2)
+    logging.info(f"Using {num_workers} workers based on GPU capabilities.")
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         loop = asyncio.get_event_loop()
-        for _ in range(num_workers):
-            tasks.append(loop.create_task(generate_and_check(target_addresses, stop_event, counter, max_checks)))
-        
+        tasks = [
+            loop.create_task(generate_and_check(target_addresses, stop_event, counter, max_checks))
+            for _ in range(num_workers)
+        ]
         await asyncio.gather(*tasks)
 
     end_time = time.time()
