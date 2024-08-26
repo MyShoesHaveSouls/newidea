@@ -35,9 +35,8 @@ def check_addresses(private_keys, target_addresses):
 async def generate_and_check(target_addresses, stop_event, counter, max_checks, device):
     batch_size = 1000  # Number of keys to generate per batch
     while not stop_event.is_set():
-        # Generate a batch of private keys on the GPU using ROCm
-        private_keys_batch = torch.randint(0, 2**256, (batch_size,), dtype=torch.int64, device=device).cpu().numpy()
-        private_keys_batch = [hex(key)[2:].zfill(64) for key in private_keys_batch]
+        # Generate a batch of private keys
+        private_keys_batch = [binascii.hexlify(os.urandom(32)).decode('utf-8') for _ in range(batch_size)]
         result = await asyncio.get_event_loop().run_in_executor(None, check_addresses, private_keys_batch, target_addresses)
         if result:
             stop_event.set()  # Signal other tasks to stop
