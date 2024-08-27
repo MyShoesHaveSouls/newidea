@@ -62,7 +62,7 @@ async def main():
     start_time = time.time()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    num_workers = 200
+    num_workers = 25
 
     logging.info(f"Number of workers: {num_workers}")
 
