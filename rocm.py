@@ -33,7 +33,7 @@ def check_addresses(private_keys, target_addresses):
     return None
 
 async def generate_and_check(target_addresses, stop_event, counter, max_checks, device):
-    batch_size = 1000  # Number of keys to generate per batch
+    batch_size = 10000  # Number of keys to generate per batch
     while not stop_event.is_set():
         # Generate a batch of private keys
         private_keys_batch = [binascii.hexlify(os.urandom(32)).decode('utf-8') for _ in range(batch_size)]
@@ -62,7 +62,7 @@ async def main():
     start_time = time.time()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    num_workers = 20
+    num_workers = 2000
 
     logging.info(f"Number of workers: {num_workers}")
 
