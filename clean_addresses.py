@@ -10,7 +10,7 @@ def clean_addresses_file(input_file, output_file):
                 outfile.write(f"{address}\n")
                 
 # Usage
-input_file = 'addys.txt'
+input_file = 'addresses.txt'
 output_file = 'cleaned_addresses.txt'
 clean_addresses_file(input_file, output_file)
 print(f"Cleaned addresses saved to {output_file}.")
