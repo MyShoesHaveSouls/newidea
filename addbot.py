@@ -2,7 +2,7 @@ import time
 import sqlite3
 import requests
 
-ETHERSCAN_API_KEY = 'YOUR_ETHERSCAN_API_KEY'
+ETHERSCAN_API_KEY = ''
 ETHERSCAN_API_URL = 'https://api.etherscan.io/api'
 DATABASE_FILE = 'database.db'
 
