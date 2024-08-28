@@ -2,7 +2,16 @@ import time
 import sqlite3
 import requests
 
-ETHERSCAN_API_KEY = ''
+ETHERSCAN_API_KEYS = 'F92Z14GE2DTF6PBBYY1YPHPJ438PT3P2VI',
+    '4Q5U7HNF4CGTVTGEMGRV5ZU9WYNJ6N7YA5',
+    'EX8K12JY7BCVG8RAUU8X2Z6QT2GCF5EYB4',
+    'DZHWCIEA2WW86CZEC88IGWG1JFB6JN3VHS',
+    'YIDAXPUWHJB21RJVMS1JMXHABMEF67RQWG',
+    '12RU83G1ATVA9V4EMM3U45X8BG4RG9PM6T',
+    'PYM9U2QD949KZZX23QJ4YZRX3KC3PHAI88',
+    'SH884AZJMKIFDMAPSMHTHJUQ3QIRPH827I',
+    'PYM9U2QD949KZZX23QJ4YZRX3KC3PHAI88',
+    'TDMPDZU8RD4V9FVB66P5S47QETEJ6R61UY',
 ETHERSCAN_API_URL = 'https://api.etherscan.io/api'
 DATABASE_FILE = 'database.db'
 
@@ -54,7 +63,7 @@ def get_recent_transactions():
         'action': 'eth_getBlockByNumber',
         'tag': 'latest',
         'boolean': 'true',
-        'apikey': ETHERSCAN_API_KEY
+        'apikey': ETHERSCAN_API_KEYS
     }
     response = requests.get(ETHERSCAN_API_URL, params=params)
     data = response.json()
@@ -76,7 +85,7 @@ def get_balance(address):
         'action': 'balance',
         'address': address,
         'tag': 'latest',
-        'apikey': ETHERSCAN_API_KEY
+        'apikey': ETHERSCAN_API_KEYS
     }
     response = requests.get(ETHERSCAN_API_URL, params=params)
     data = response.json()
@@ -153,7 +162,7 @@ def fetch_erc20_tokens(address):
             'contractaddress': token['contract_address'],
             'address': address,
             'tag': 'latest',
-            'apikey': ETHERSCAN_API_KEY
+            'apikey': ETHERSCAN_API_KEYS
         }
         response = requests.get(ETHERSCAN_API_URL, params=params)
         data = response.json()
