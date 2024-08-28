@@ -5,7 +5,7 @@ import numpy as np
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import logging
-from multiprocessing import Manager
+from multiprocessing import Manager, Lock
 import time
 import re
 
@@ -15,7 +15,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def load_addresses(file_path):
     with open(file_path, 'r') as file:
         data = file.read()
-
     addresses = {match.group(0).lower() for match in re.finditer(r'0x[a-fA-F0-9]{40}', data)}
     logging.info(f"Loaded {len(addresses)} addresses.")
     return addresses
@@ -34,7 +33,7 @@ def check_addresses(private_keys, target_addresses):
             results.append((private_key, address))
     return results
 
-async def generate_and_check(target_addresses, stop_event, counter, max_checks):
+async def generate_and_check(target_addresses, stop_event, counter, max_checks, lock):
     batch_size = 1000
     while not stop_event.is_set():
         private_keys_batch = np.array([binascii.hexlify(os.urandom(32)).decode('utf-8') for _ in range(batch_size)])
@@ -44,12 +43,13 @@ async def generate_and_check(target_addresses, stop_event, counter, max_checks):
             stop_event.set()
             logging.info("Stopping all tasks due to match found.")
             return result
-        counter.value += batch_size
+        with lock:
+            counter.value += batch_size
+            print(f"Checked {counter.value:,} addresses...", end='\r')  # Progress reporting with lock
         if counter.value >= max_checks:
             stop_event.set()
             logging.info(f"Reached maximum number of checks: {max_checks}. Stopping all tasks.")
             return None
-        print(f"\rChecked {counter.value:,} addresses...", end='')
 
 async def main():
     addresses_file = 'addresses.txt'
@@ -60,6 +60,7 @@ async def main():
     manager = Manager()
     stop_event = asyncio.Event()
     counter = manager.Value('i', 0)
+    lock = manager.Lock()
 
     start_time = time.time()
 
@@ -69,7 +70,7 @@ async def main():
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         loop = asyncio.get_event_loop()
         for _ in range(num_workers):
-            tasks.append(loop.create_task(generate_and_check(target_addresses, stop_event, counter, max_checks)))
+            tasks.append(loop.create_task(generate_and_check(target_addresses, stop_event, counter, max_checks, lock)))
         
         await asyncio.gather(*tasks)
 
