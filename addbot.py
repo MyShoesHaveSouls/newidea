@@ -1,6 +1,11 @@
 import time
 import sqlite3
 import requests
+import asyncio
+import aiohttp
+from aiohttp import ClientSession
+from asyncio import Semaphore
+from random import choice
 
 ETHERSCAN_API_KEYS = [
     'F92Z14GE2DTF6PBBYY1YPHPJ438PT3P2VI',
@@ -17,6 +22,10 @@ ETHERSCAN_API_KEYS = [
 
 ETHERSCAN_API_URL = 'https://api.etherscan.io/api'
 DATABASE_FILE = 'database.db'
+MAX_CALLS_PER_SECOND = 5  # Limit to 5 API calls per second per API key
+
+# Create a semaphore for each API key
+semaphores = {key: Semaphore(MAX_CALLS_PER_SECOND) for key in ETHERSCAN_API_KEYS}
 
 def initialize_database():
     conn = sqlite3.connect(DATABASE_FILE)
@@ -52,16 +61,22 @@ def initialize_database():
     conn.commit()
     conn.close()
 
-def get_recent_transactions():
+async def fetch_with_rate_limit(session: ClientSession, url: str, params: dict, api_key: str):
+    async with semaphores[api_key]:  # Semaphore for the specific API key
+        async with session.get(url, params=params) as response:
+            await asyncio.sleep(1)  # Ensure the rate limit of 5 calls per second per key
+            return await response.json()
+
+async def get_recent_transactions(session: ClientSession):
+    api_key = choice(ETHERSCAN_API_KEYS)  # Select a random API key for each call
     params = {
         'module': 'proxy',
         'action': 'eth_getBlockByNumber',
         'tag': 'latest',
         'boolean': 'true',
-        'apikey': ETHERSCAN_API_KEYS
+        'apikey': api_key
     }
-    response = requests.get(ETHERSCAN_API_URL, params=params)
-    data = response.json()
+    data = await fetch_with_rate_limit(session, ETHERSCAN_API_URL, params, api_key)
 
     if data['status'] == '1' and 'result' in data:
         return data['result']['transactions']
@@ -113,7 +128,8 @@ def update_nfts(address, nfts):
     conn.commit()
     conn.close()
 
-def fetch_erc20_tokens(address):
+async def fetch_erc20_tokens(session: ClientSession, address):
+    api_key = choice(ETHERSCAN_API_KEYS)  # Select a random API key for each call
     tokens = [
         {'contract_address': '0x1234567890abcdef1234567890abcdef12345678', 'name': 'TokenA', 'symbol': 'TKA'},
         {'contract_address': '0xabcdef1234567890abcdef1234567890abcdef12', 'name': 'TokenB', 'symbol': 'TKB'},
@@ -127,10 +143,9 @@ def fetch_erc20_tokens(address):
             'contractaddress': token['contract_address'],
             'address': address,
             'tag': 'latest',
-            'apikey': ETHERSCAN_API_KEYS
+            'apikey': api_key
         }
-        response = requests.get(ETHERSCAN_API_URL, params=params)
-        data = response.json()
+        data = await fetch_with_rate_limit(session, ETHERSCAN_API_URL, params, api_key)
 
         if data['status'] == '1' and 'result' in data:
             balance = int(data['result']) / 10**18  # Convert from Wei to Token units
@@ -144,10 +159,10 @@ def fetch_erc20_tokens(address):
     
     return erc20_tokens
 
-def fetch_nfts(address):
+async def fetch_nfts(session: ClientSession, address):
     opensea_url = f'https://api.opensea.io/api/v1/assets?owner={address}&order_direction=desc&offset=0&limit=50'
-    response = requests.get(opensea_url)
-    data = response.json()
+    async with session.get(opensea_url) as response:
+        data = await response.json()
 
     nfts = []
     if 'assets' in data:
@@ -163,39 +178,43 @@ def fetch_nfts(address):
     
     return nfts
 
-def main():
+async def main():
     initialize_database()
     seen_wallets = set()
 
-    while True:
-        try:
-            transactions = get_recent_transactions()
-            new_wallets = set()
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                transactions = await get_recent_transactions(session)
+                new_wallets = set()
 
-            for tx in transactions:
-                from_wallet, to_wallet = get_wallet_from_transaction(tx)
-                if from_wallet and from_wallet not in seen_wallets:
-                    new_wallets.add(from_wallet)
-                if to_wallet and to_wallet not in seen_wallets:
-                    new_wallets.add(to_wallet)
+                for tx in transactions:
+                    from_wallet, to_wallet = get_wallet_from_transaction(tx)
+                    if from_wallet and from_wallet not in seen_wallets:
+                        new_wallets.add(from_wallet)
+                    if to_wallet and to_wallet not in seen_wallets:
+                        new_wallets.add(to_wallet)
 
-            if new_wallets:
-                update_database_with_wallets(new_wallets)
-                seen_wallets.update(new_wallets)
-                print(f"Added {len(new_wallets)} new wallets to the database.")
+                if new_wallets:
+                    update_database_with_wallets(new_wallets)
+                    seen_wallets.update(new_wallets)
+                    print(f"Added {len(new_wallets)} new wallets to the database.")
 
-                for wallet in new_wallets:
-                    erc20_tokens = fetch_erc20_tokens(wallet)
-                    update_erc20_tokens(wallet, erc20_tokens)
-                    
-                    nfts = fetch_nfts(wallet)
-                    update_nfts(wallet, nfts)
+                    tasks = []
+                    for wallet in new_wallets:
+                        tasks.append(fetch_erc20_tokens(session, wallet))
+                        tasks.append(fetch_nfts(session, wallet))
 
-            # Wait for 5 minutes
-            time.sleep(300)
+                    results = await asyncio.gather(*tasks)
+                    for wallet, (erc20_tokens, nfts) in zip(new_wallets, zip(results[::2], results[1::2])):
+                        update_erc20_tokens(wallet, erc20_tokens)
+                        update_nfts(wallet, nfts)
 
-        except Exception as e:
-            print(f"An error occurred: {e}")
+                # Wait for 5 minutes
+                await asyncio.sleep(300)
+
+            except Exception as e:
+                print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
