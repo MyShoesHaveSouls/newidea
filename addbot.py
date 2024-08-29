@@ -27,15 +27,7 @@ def initialize_database():
             address TEXT PRIMARY KEY
         )
     ''')
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS balances (
-            address TEXT PRIMARY KEY,
-            balance REAL,
-            FOREIGN KEY(address) REFERENCES wallets(address)
-        )
-    ''')
-    
+
     c.execute('''
         CREATE TABLE IF NOT EXISTS erc20_tokens (
             address TEXT,
@@ -46,7 +38,7 @@ def initialize_database():
             PRIMARY KEY(address, token_name)
         )
     ''')
-    
+
     c.execute('''
         CREATE TABLE IF NOT EXISTS nfts (
             address TEXT,
@@ -82,24 +74,6 @@ def get_wallet_from_transaction(transaction):
     to_wallet = transaction['to']
     return from_wallet, to_wallet
 
-def get_balance(address):
-    params = {
-        'module': 'account',
-        'action': 'balance',
-        'address': address,
-        'tag': 'latest',
-        'apikey': ETHERSCAN_API_KEYS
-    }
-    response = requests.get(ETHERSCAN_API_URL, params=params)
-    data = response.json()
-
-    if data['status'] == '1' and 'result' in data:
-        balance = int(data['result']) / 1e18  # Convert from Wei to ETH
-        return balance
-    else:
-        print(f"Error fetching balance for {address}: {data.get('result', 'Unknown error')}")
-        return 0
-
 def update_database_with_wallets(wallets):
     conn = sqlite3.connect(DATABASE_FILE)
     c = conn.cursor()
@@ -109,18 +83,6 @@ def update_database_with_wallets(wallets):
             INSERT OR IGNORE INTO wallets (address)
             VALUES (?)
         ''', (address,))
-    
-    conn.commit()
-    conn.close()
-
-def update_balance(address, balance):
-    conn = sqlite3.connect(DATABASE_FILE)
-    c = conn.cursor()
-
-    c.execute('''
-        INSERT OR REPLACE INTO balances (address, balance)
-        VALUES (?, ?)
-    ''', (address, balance))
     
     conn.commit()
     conn.close()
@@ -223,9 +185,6 @@ def main():
                 print(f"Added {len(new_wallets)} new wallets to the database.")
 
                 for wallet in new_wallets:
-                    balance = get_balance(wallet)
-                    update_balance(wallet, balance)
-                    
                     erc20_tokens = fetch_erc20_tokens(wallet)
                     update_erc20_tokens(wallet, erc20_tokens)
                     
